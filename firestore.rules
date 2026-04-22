@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function incoming() {
+      return request.resource.data;
+    }
+    
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+
+    // --- Entity Validations ---
+    
+    function isValidUser(data) {
+      return data.uid == request.auth.uid 
+        && data.email is string && data.email.size() <= 200
+        && (data.keys().hasAll(['uid', 'email', 'createdAt']) && data.keys().size() >= 3);
+    }
+
+    function isValidScheduleBlock(data) {
+      return data.userId == request.auth.uid
+        && data.title is string && data.title.size() <= 200
+        && data.startTime is timestamp
+        && data.endTime is timestamp;
+    }
+
+    function isValidGoal(data) {
+      return data.userId == request.auth.uid
+        && data.title is string && data.title.size() <= 200
+        && data.status in ['active', 'completed', 'failed'];
+    }
+
+    function isValidChatMessage(data) {
+      return data.userId == request.auth.uid
+        && data.role in ['user', 'assistant']
+        && data.content is string && data.content.size() <= 10000;
+    }
+
+    // --- Collection Routes ---
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'preferences', 'statistics', 'updatedAt']);
+      
+      match /schedule/{blockId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(blockId);
+        allow create: if isOwner(userId) && isValidScheduleBlock(incoming());
+        allow update: if isOwner(userId) && isValidScheduleBlock(incoming())
+          && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'type', 'startTime', 'endTime', 'description', 'isCompleted']);
+        allow delete: if isOwner(userId);
+      }
+
+      match /quranProgress/main {
+        allow get: if isOwner(userId);
+        allow create, update: if isOwner(userId) && incoming().userId == userId;
+      }
+
+      match /goals/{goalId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(goalId);
+        allow create: if isOwner(userId) && isValidGoal(incoming());
+        allow update: if isOwner(userId) && isValidGoal(incoming())
+          && (!existing().status in ['completed', 'failed'] || incoming().status == existing().status)
+          && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'title']);
+        allow delete: if isOwner(userId);
+      }
+
+      match /chats/{messageId} {
+        allow list: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(messageId);
+        allow create: if isOwner(userId) && isValidChatMessage(incoming());
+        // Messages are usually immutable
+      }
+    }
+  }
+}

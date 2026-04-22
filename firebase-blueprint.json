@@ -1,0 +1,112 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account information and overarching settings.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique identifier for the user" },
+        "email": { "type": "string", "description": "User email" },
+        "displayName": { "type": "string", "description": "User's full name" },
+        "photoURL": { "type": "string", "description": "Profile picture URL" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "preferences": {
+          "type": "object",
+          "properties": {
+            "language": { "type": "string", "enum": ["en", "ar", "fr", "id"], "description": "Preferred interface language" },
+            "theme": { "type": "string", "enum": ["dark", "light"], "description": "UI theme" }
+          }
+        },
+        "statistics": {
+          "type": "object",
+          "properties": {
+            "disciplineScore": { "type": "number" },
+            "weeklyRate": { "type": "number" },
+            "completedSessions": { "type": "number" }
+          }
+        }
+      },
+      "required": ["uid", "email"]
+    },
+    "ScheduleBlock": {
+      "title": "Schedule Block",
+      "description": "A single time block in the user's weekly schedule.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["religious", "work", "training", "slack"] },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "dayOfWeek": { "type": "integer", "description": "0-6 for Mon-Sun" },
+        "description": { "type": "string" },
+        "isCompleted": { "type": "boolean" }
+      },
+      "required": ["userId", "title", "startTime", "endTime"]
+    },
+    "QuranProgress": {
+      "title": "Quran Progress",
+      "description": "Tracking of Juzz and Surah memorization.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "currentJuzz": { "type": "integer" },
+        "memorizedVerses": { "type": "integer" },
+        "totalVerses": { "type": "integer" },
+        "currentSurah": { "type": "string" },
+        "dailyTarget": { "type": "integer" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId"]
+    },
+    "Goal": {
+      "title": "Discipline Goal",
+      "description": "A specific target habit or milestone.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "completed", "failed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "status"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "A message in an AI conversation.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["userId", "role", "content"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Primary user document."
+    },
+    "users/{userId}/schedule/{blockId}": {
+      "schema": "ScheduleBlock",
+      "description": "User-specific schedule items."
+    },
+    "users/{userId}/quranProgress/main": {
+      "schema": "QuranProgress",
+      "description": "User's Quran progress summary."
+    },
+    "users/{userId}/goals/{goalId}": {
+      "schema": "Goal",
+      "description": "User's discipline goals."
+    },
+    "users/{userId}/chats/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "User's interaction history with the AI."
+    }
+  }
+}

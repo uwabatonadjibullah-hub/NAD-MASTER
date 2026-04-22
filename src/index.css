@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Newsreader", ui-serif, Georgia, serif;
+
+  --color-primary: #d6c3b5;
+  --color-on-primary: #3a2e24;
+  --color-surface: #151312;
+  --color-on-surface: #e7e1e0;
+  --color-on-surface-variant: #d1c4bc;
+  --color-outline: #9a8f87;
+  --color-outline-variant: #4e453f;
+  --color-error: #ffb4ab;
+  --color-on-error: #690005;
+
+  --border-radius-DEFAULT: 0.25rem;
+  --border-radius-lg: 0.5rem;
+  --border-radius-xl: 0.75rem;
+  --border-radius-full: 9999px;
+}
+
+@layer base {
+  body {
+    @apply bg-surface text-on-surface antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif;
+  }
+}
+
+@layer components {
+  .ledger-card {
+    @apply bg-[#211f1e] border border-outline/10 rounded-lg p-6;
+  }
+
+  .label-caps {
+    @apply font-sans font-bold text-[12px] uppercase tracking-widest text-on-surface-variant;
+  }
+}
+
