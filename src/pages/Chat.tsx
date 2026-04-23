@@ -1,16 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, MoreHorizontal, Settings2, CheckCircle2 } from 'lucide-react';
-import { ai, SYSTEM_INSTRUCTIONS } from '../lib/gemini';
+import { ai, SYSTEM_INSTRUCTIONS, tools } from '../lib/gemini';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '../lib/utils';
-import { auth } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  isPlan?: boolean;
+  planData?: any;
 }
 
 export default function Chat() {
@@ -46,29 +47,76 @@ export default function Chat() {
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.1-pro-preview",
         contents: [
           { role: 'user', parts: [{ text: userMessage.content }] }
         ],
         config: {
           systemInstruction: SYSTEM_INSTRUCTIONS,
+          tools: tools,
         }
       });
+
+      const assistantMessagePart = response.text || "";
+      const functionCalls = response.functionCalls;
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: response.text || "I apologize, but I am unable to process that request at the moment.",
+        content: assistantMessagePart || (functionCalls ? "I have prepared a plan for you based on our discussion. Would you like to review and accept it?" : "I apologize, I could not generate a response."),
         timestamp: new Date(),
-        // Simple heuristic for "Plan" detection for visual demo
-        isPlan: response.text?.toLowerCase().includes('plan') || response.text?.toLowerCase().includes('week'),
+        planData: functionCalls ? functionCalls[0] : null,
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+
+      // Save to Firestore (optional, but good for persistence)
+      if (auth.currentUser) {
+        await addDoc(collection(db, 'users', auth.currentUser.uid, 'chats'), {
+          content: userMessage.content,
+          role: 'user',
+          createdAt: serverTimestamp(),
+        });
+        await addDoc(collection(db, 'users', auth.currentUser.uid, 'chats'), {
+          content: assistantMessage.content,
+          role: 'assistant',
+          createdAt: serverTimestamp(),
+          planData: assistantMessage.planData || null,
+        });
+      }
+
     } catch (error) {
       console.error("AI Response failed:", error);
     } finally {
       setIsTyping(false);
+    }
+  };
+
+  const acceptPlan = async (plan: any) => {
+    if (!auth.currentUser) return;
+
+    try {
+      if (plan.name === "updateSchedule") {
+        const blocks = plan.args.blocks;
+        for (const block of blocks) {
+          await addDoc(collection(db, 'users', auth.currentUser.uid, 'schedule'), {
+            ...block,
+            createdAt: serverTimestamp(),
+          });
+        }
+        alert("Schedule updated successfully!");
+      } else if (plan.name === "updateQuranTarget") {
+        await addDoc(collection(db, 'users', auth.currentUser.uid, 'goals'), {
+          title: `Quran Target: ${plan.args.targetJuzz} Juzz (${plan.args.pace})`,
+          type: 'quran',
+          status: 'active',
+          createdAt: serverTimestamp(),
+        });
+        alert("Quran target updated successfully!");
+      }
+    } catch (error) {
+      console.error("Failed to accept plan:", error);
+      alert("Error updating your data. Please check your connection.");
     }
   };
 
@@ -112,14 +160,23 @@ export default function Chat() {
               </div>
 
               {/* Special Plan UI Logic */}
-              {msg.isPlan && (
+              {msg.planData && (
                 <div className="mt-6 border-t border-outline/10 pt-6 space-y-4 animate-in zoom-in-95 duration-500">
+                  <div className="bg-surface/50 p-4 rounded-lg border border-outline/10">
+                    <p className="label-caps !text-[10px] mb-2">{msg.planData.name === 'updateSchedule' ? 'Proposed Schedule' : 'Proposed Quran Target'}</p>
+                    <pre className="text-[10px] font-mono text-on-surface-variant overflow-x-auto whitespace-pre-wrap">
+                      {JSON.stringify(msg.planData.args, null, 2)}
+                    </pre>
+                  </div>
                   <div className="flex justify-end gap-3">
                     <button className="px-5 py-2 label-caps !text-[10px] border border-primary text-primary rounded-full hover:bg-primary/5 transition-colors flex items-center gap-2">
                       <Settings2 size={12} />
-                      Adjust Plan
+                      Adjust
                     </button>
-                    <button className="px-5 py-2 label-caps !text-[10px] bg-primary text-on-primary rounded-full hover:opacity-90 transition-opacity flex items-center gap-2">
+                    <button 
+                      onClick={() => acceptPlan(msg.planData)}
+                      className="px-5 py-2 label-caps !text-[10px] bg-primary text-on-primary rounded-full hover:opacity-90 transition-opacity flex items-center gap-2"
+                    >
                        <CheckCircle2 size={12} />
                       Accept Plan
                     </button>
@@ -153,7 +210,7 @@ export default function Chat() {
                   handleSend();
                 }
               }}
-              placeholder="Ask NAD MASTER..."
+              placeholder="Discuss routines or quran with NAD MASTER..."
               className="w-full bg-transparent border-none border-b-2 border-outline/30 focus:border-primary focus:ring-0 transition-colors text-on-surface py-3 px-0 resize-none max-h-48 scrollbar-hide font-body-md"
               rows={1}
             />
