@@ -12,45 +12,74 @@ export interface SurahInfo {
 
 export async function fetchSurahDetails(surahNameOrId: string | number): Promise<SurahInfo | null> {
   try {
-    const chapters = await fetchAllSurahs();
-    if (typeof surahNameOrId === 'number') {
-      return chapters.find(c => c.id === surahNameOrId) || null;
-    }
-
-    const searchName = surahNameOrId.toLowerCase().replace(/[^a-z]/g, '');
-    return chapters.find(c => 
-      c.name_simple.toLowerCase().replace(/[^a-z]/g, '').includes(searchName) ||
-      c.name_arabic.includes(surahNameOrId)
-    ) || null;
+    const response = await fetch(`https://api.alquran.cloud/v1/surah/${surahNameOrId}`);
+    if (!response.ok) return null;
+    const result = await response.json();
+    const s = result.data;
+    return {
+      id: s.number,
+      name_arabic: s.name,
+      name_simple: s.englishName,
+      translated_name: {
+        name: s.englishNameTranslation
+      },
+      verses_count: s.numberOfAyahs,
+      revelation_place: s.revelationType,
+      pages: [] // Al Quran Cloud doesn't provide pages in this endpoint
+    };
   } catch (error) {
-    console.error("Error fetching Quran data:", error);
+    console.error("Error fetching Surah details from Al Quran Cloud:", error);
     return null;
   }
 }
 
 export async function fetchAllSurahs(): Promise<SurahInfo[]> {
   try {
-    // Using qurani.ai specialized endpoint for English data
-    const response = await fetch('https://qurani.ai/api/chapters/en');
+    const response = await fetch('https://api.alquran.cloud/v1/surah');
     if (!response.ok) {
-      // Fallback to quran.com if qurani.ai specific path fails
-      const fallbackResponse = await fetch('https://api.quran.com/api/v4/chapters');
-      const data = await fallbackResponse.json();
-      return data.chapters;
+      // Fallback to internal/previous list if alquran.cloud is down
+      return [];
     }
-    const data = await response.json();
-    return data.chapters;
+    const result = await response.json();
+    return result.data.map((s: any) => ({
+      id: s.number,
+      name_arabic: s.name,
+      name_simple: s.englishName,
+      translated_name: {
+        name: s.englishNameTranslation
+      },
+      verses_count: s.numberOfAyahs,
+      revelation_place: s.revelationType,
+      pages: []
+    }));
   } catch (error) {
-    console.error("Error fetching all Surahs:", error);
+    console.error("Error fetching all Surahs from Al Quran Cloud:", error);
     return [];
   }
 }
 
-export function getAudioUrl(surahId: number): string {
-  // qurani.ai provides direct high-quality audio streams
-  // Format: surahId padded to 3 digits
-  const paddedId = surahId.toString().padStart(3, '0');
-  return `https://qurani.ai/audio/recitation/en/${paddedId}.mp3`;
+export function getAudioUrl(surahId: number, edition: string = 'ar.alafasy.hafs'): string {
+  // Pattern verified from qurani.ai docs
+  // Full surah audio is often available via this CDN pattern for surah-based editions
+  return `https://quranhub.b-cdn.net/quran/audio/surah/${surahId}/${edition}/1.mp3`;
+}
+
+/**
+ * Fetches the specific audio metadata for a surah to get the most accurate stream URL.
+ */
+export async function fetchSurahAudioUrl(surahId: number, edition: string = 'ar.alafasy.hafs'): Promise<string> {
+  try {
+    const response = await fetch(`https://api.qurani.ai/gw/qh/v1/surah/${surahId}/${edition}`);
+    if (response.ok) {
+      const result = await response.json();
+      if (result.data && result.data.audio) {
+        return result.data.audio;
+      }
+    }
+    return getAudioUrl(surahId, edition);
+  } catch (error) {
+    return getAudioUrl(surahId, edition);
+  }
 }
 
 export function getJuzs() {

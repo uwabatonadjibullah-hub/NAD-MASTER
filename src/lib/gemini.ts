@@ -1,12 +1,31 @@
-import { GoogleGenAI, FunctionDeclaration, Type } from "@google/genai";
+import { GoogleGenAI, FunctionDeclaration, Type, HarmCategory, HarmBlockThreshold } from "@google/genai";
 
-const apiKey = process.env.GEMINI_API_KEY;
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
 if (!apiKey) {
   console.warn("GEMINI_API_KEY is not defined. AI features will be limited.");
 }
 
 export const ai = new GoogleGenAI({ apiKey: apiKey || "" });
+
+export const safetySettings = [
+  {
+    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+  },
+];
 
 // Function Declarations for App Control
 export const updateScheduleFunctionDeclaration: FunctionDeclaration = {

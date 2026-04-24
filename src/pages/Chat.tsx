@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, MoreHorizontal, Settings2, CheckCircle2 } from 'lucide-react';
-import { ai, SYSTEM_INSTRUCTIONS, tools } from '../lib/gemini';
-import ReactMarkdown from 'react-markdown';
+import { cn } from '../lib/utils';
 import { cn } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { ai, SYSTEM_INSTRUCTIONS, tools, safetySettings } from '../lib/gemini';
+import ReactMarkdown from 'react-markdown';
 
 interface Message {
   id: string;
@@ -47,13 +48,14 @@ export default function Chat() {
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
+        model: "gemini-1.5-pro",
         contents: [
           { role: 'user', parts: [{ text: userMessage.content }] }
         ],
         config: {
           systemInstruction: SYSTEM_INSTRUCTIONS,
           tools: tools,
+          safetySettings: safetySettings,
         }
       });
 

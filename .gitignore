@@ -6,3 +6,21 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Sensitive files
+API_FIREBASE.txt
+google-services.json
+
+# IDE and Tooling
+.vscode/
+.idea/
+.agents/
+skills-lock.json
+
+# Firebase
+.firebase/
+fire-debug.log
+firebase-debug.log
+firestore-debug.log
+pubsub-debug.log
+ui-debug.log
