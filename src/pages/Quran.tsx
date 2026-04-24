@@ -4,7 +4,7 @@ import { cn } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
 import { doc, onSnapshot, updateDoc, setDoc, serverTimestamp, collection, query, orderBy, limit, getDocs, addDoc, deleteDoc, where } from 'firebase/firestore';
 import { fetchAudioFiles, getAudioStreamUrl, DriveFile } from '../services/driveService';
-import { fetchSurahDetails, SurahInfo, fetchAllSurahs, getJuzs } from '../services/quranService';
+import { fetchSurahDetails, SurahInfo, fetchAllSurahs, getJuzs, getAudioUrl } from '../services/quranService';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
 interface QuranProgress {
@@ -57,6 +57,7 @@ export default function Quran() {
   const [volume, setVolume] = useState(1);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [isDownloadingBatch, setIsDownloadingBatch] = useState(false);
+  const [isSeeking, setIsSeeking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Visualization State
@@ -66,6 +67,7 @@ export default function Quran() {
   const [surahInfo, setSurahInfo] = useState<SurahInfo | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [surahSearch, setSurahSearch] = useState('');
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -271,7 +273,7 @@ export default function Quran() {
     }
   };
 
-  const togglePlay = (file: DriveFile) => {
+  const togglePlay = (file: DriveFile | { id: string, name: string, surahId?: number }) => {
     if (currentAudio?.id === file.id) {
       if (isPlaying) {
         audioRef.current?.pause();
@@ -280,24 +282,56 @@ export default function Quran() {
       }
       setIsPlaying(!isPlaying);
     } else {
-      setCurrentAudio(file);
+      setCurrentAudio(file as DriveFile);
       setIsPlaying(true);
       setCurrentTime(0);
       if (audioRef.current) {
-        audioRef.current.src = getAudioStreamUrl(file.id);
+        // Use qurani.ai URL if surahId is available
+        const url = 'surahId' in file && file.surahId 
+          ? getAudioUrl(file.surahId)
+          : getAudioUrl(parseInt(file.id) || 1); // Fallback to id as surahId
+        
+        audioRef.current.src = url;
         audioRef.current.play();
       }
     }
   };
 
+  const playNext = () => {
+    if (!currentAudio || audioFiles.length === 0) return;
+    const currentIndex = audioFiles.findIndex(f => f.id === currentAudio.id);
+    const nextIndex = (currentIndex + 1) % audioFiles.length;
+    togglePlay(audioFiles[nextIndex]);
+  };
+
+  const playPrevious = () => {
+    if (!currentAudio || audioFiles.length === 0) return;
+    const currentIndex = audioFiles.findIndex(f => f.id === currentAudio.id);
+    const prevIndex = (currentIndex - 1 + audioFiles.length) % audioFiles.length;
+    togglePlay(audioFiles[prevIndex]);
+  };
+
+  const skipForward = () => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = Math.min(audioRef.current.duration, audioRef.current.currentTime + 10);
+    }
+  };
+
+  const skipBackward = () => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 10);
+    }
+  };
+
   const formatTime = (time: number) => {
+    if (isNaN(time)) return "0:00";
     const mins = Math.floor(time / 60);
     const secs = Math.floor(time % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleTimeUpdate = () => {
-    if (audioRef.current) {
+    if (audioRef.current && !isSeeking) {
       setCurrentTime(audioRef.current.currentTime);
       setDuration(audioRef.current.duration);
     }
@@ -305,10 +339,14 @@ export default function Quran() {
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value);
+    setCurrentTime(time);
+  };
+
+  const handleSeekEnd = () => {
     if (audioRef.current) {
-      audioRef.current.currentTime = time;
-      setCurrentTime(time);
+      audioRef.current.currentTime = currentTime;
     }
+    setIsSeeking(false);
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -607,49 +645,70 @@ export default function Quran() {
               </div>
             )}
             {currentAudio && (
-              <div className="hidden lg:flex items-center gap-6 animate-in fade-in zoom-in-95 bg-surface-container-high/50 p-2 pr-4 rounded-full border border-outline/10">
-                <div className="flex items-center gap-3">
+              <div className="hidden lg:flex items-center gap-4 animate-in fade-in zoom-in-95 bg-surface-container-high/50 p-2 pr-6 rounded-full border border-outline/10 shadow-sm">
+                <div className="flex items-center gap-2 px-2 border-r border-outline/10">
+                  <button onClick={playPrevious} className="p-1.5 text-on-surface-variant hover:text-secondary transition-colors" title="Previous">
+                    <ChevronDown size={16} className="rotate-90" />
+                  </button>
                   <button 
                     onClick={() => togglePlay(currentAudio)}
-                    className="w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center transition-all hover:scale-105"
+                    className="w-10 h-10 rounded-full bg-secondary text-on-secondary flex items-center justify-center transition-all hover:scale-105 shadow-md shadow-secondary/20"
                   >
-                    {isPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
+                    {isPlaying ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
                   </button>
-                  <div className="flex flex-col min-w-[120px]">
-                    <span className="text-[10px] font-serif italic truncate max-w-[150px]">{currentAudio.name}</span>
-                    <div className="flex items-center gap-2">
-                       <span className="text-[8px] opacity-50">{formatTime(currentTime)}</span>
-                       <input 
-                          type="range" 
-                          min="0" 
-                          max={duration || 100} 
-                          value={currentTime} 
-                          onChange={handleSeek}
-                          className="h-1 w-24 bg-secondary/20 rounded-full appearance-none cursor-pointer accent-secondary"
-                       />
-                       <span className="text-[8px] opacity-50">{formatTime(duration)}</span>
-                    </div>
+                  <button onClick={playNext} className="p-1.5 text-on-surface-variant hover:text-secondary transition-colors" title="Next">
+                    <ChevronDown size={16} className="-rotate-90" />
+                  </button>
+                </div>
+
+                <div className="flex flex-col min-w-[160px] gap-1">
+                  <span className="text-[10px] font-bold truncate max-w-[150px] text-primary">{currentAudio.name}</span>
+                  <div className="flex items-center gap-2">
+                     <span className="text-[9px] font-mono opacity-50 w-8">{formatTime(currentTime)}</span>
+                     <div className="relative group flex-1 h-6 flex items-center">
+                        <input 
+                           type="range" 
+                           min="0" 
+                           max={duration || 100} 
+                           value={currentTime} 
+                           onChange={handleSeek}
+                           onMouseDown={() => setIsSeeking(true)}
+                           onMouseUp={handleSeekEnd}
+                           onTouchStart={() => setIsSeeking(true)}
+                           onTouchEnd={handleSeekEnd}
+                           className="h-1.5 w-full bg-secondary/10 rounded-full appearance-none cursor-pointer accent-secondary relative z-10"
+                        />
+                        <div 
+                          className="absolute top-1/2 -translate-y-1/2 left-0 h-1.5 bg-secondary rounded-full pointer-events-none transition-all" 
+                          style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+                        />
+                     </div>
+                     <span className="text-[9px] font-mono opacity-50 w-8">{formatTime(duration)}</span>
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-2 border-l border-outline/10 pl-4 ml-1">
-                   <Volume2 size={12} className="opacity-50" />
-                   <input 
-                      type="range" 
-                      min="0" 
-                      max="1" 
-                      step="0.1" 
-                      value={volume} 
-                      onChange={handleVolumeChange}
-                      className="h-1 w-12 bg-outline/20 rounded-full appearance-none cursor-pointer accent-secondary"
-                   />
+                <div className="flex items-center gap-3 border-l border-outline/10 pl-4 ml-1">
+                   <div className="flex items-center gap-1">
+                     <Volume2 size={12} className="text-secondary opacity-70" />
+                     <input 
+                        type="range" 
+                        min="0" 
+                        max="1" 
+                        step="0.1" 
+                        value={volume} 
+                        onChange={handleVolumeChange}
+                        className="h-1 w-16 bg-outline/20 rounded-full appearance-none cursor-pointer accent-secondary"
+                     />
+                   </div>
                 </div>
 
                 <audio 
                   ref={audioRef} 
+                  autoPlay
+                  preload="auto"
                   onPlay={() => setIsPlaying(true)} 
                   onPause={() => setIsPlaying(false)}
-                  onEnded={() => setIsPlaying(false)}
+                  onEnded={playNext}
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={handleTimeUpdate}
                 />
@@ -711,43 +770,51 @@ export default function Quran() {
 
         {/* Mobile Mini Player */}
         {currentAudio && (
-          <div className="md:hidden p-4 bg-surface-container border-t border-secondary/20 space-y-3">
-             <div className="flex items-center gap-4">
-               <button 
-                  onClick={() => togglePlay(currentAudio)}
-                  className="w-10 h-10 rounded-full bg-secondary text-on-secondary flex items-center justify-center shrink-0 shadow-lg shadow-secondary/20"
-                >
-                  {isPlaying ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold truncate">{currentAudio.name}</p>
-                  <p className="text-[10px] opacity-50 font-serif italic">NAD MASTER Training Audio</p>
+          <div className="md:hidden p-4 bg-surface-container border-t border-secondary/20 space-y-4 shadow-inner">
+             <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0">
+                  <button 
+                    onClick={() => togglePlay(currentAudio)}
+                    className="w-12 h-12 rounded-full bg-secondary text-on-secondary flex items-center justify-center shrink-0 shadow-lg shadow-secondary/20 transition-transform active:scale-90"
+                  >
+                    {isPlaying ? <Pause size={20} /> : <Play size={20} className="ml-0.5" />}
+                  </button>
+                  <div className="truncate">
+                    <p className="text-sm font-bold truncate text-primary">{currentAudio.name}</p>
+                    <p className="text-[10px] opacity-50 font-serif italic">Auto-advance active</p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
-                   <Volume2 size={12} className="opacity-50" />
-                   <input 
-                      type="range" 
-                      min="0" 
-                      max="1" 
-                      step="0.1" 
-                      value={volume} 
-                      onChange={handleVolumeChange}
-                      className="h-1 w-12 bg-outline/20 rounded-full appearance-none cursor-pointer accent-secondary"
-                   />
+                   <button onClick={playPrevious} className="p-2 text-primary/60"><ChevronDown size={18} className="rotate-90" /></button>
+                   <button onClick={playNext} className="p-2 text-primary/60"><ChevronDown size={18} className="-rotate-90" /></button>
                 </div>
              </div>
              
-             <div className="space-y-1">
-               <input 
-                  type="range" 
-                  min="0" 
-                  max={duration || 100} 
-                  value={currentTime} 
-                  onChange={handleSeek}
-                  className="w-full h-1 bg-secondary/10 rounded-full appearance-none cursor-pointer accent-secondary"
-               />
-               <div className="flex justify-between text-[8px] opacity-40 font-mono">
+             <div className="space-y-2">
+               <div className="relative h-6 flex items-center">
+                 <input 
+                    type="range" 
+                    min="0" 
+                    max={duration || 100} 
+                    value={currentTime} 
+                    onChange={handleSeek}
+                    onMouseDown={() => setIsSeeking(true)}
+                    onMouseUp={handleSeekEnd}
+                    onTouchStart={() => setIsSeeking(true)}
+                    onTouchEnd={handleSeekEnd}
+                    className="w-full h-2 bg-secondary/10 rounded-full appearance-none cursor-pointer accent-secondary relative z-10"
+                 />
+                 <div 
+                    className="absolute top-1/2 -translate-y-1/2 left-0 h-2 bg-secondary rounded-full pointer-events-none transition-all" 
+                    style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+                  />
+               </div>
+               <div className="flex justify-between text-[10px] opacity-60 font-mono font-bold text-primary">
                   <span>{formatTime(currentTime)}</span>
+                  <div className="flex gap-4">
+                    <button onClick={skipBackward} className="text-[10px] label-caps opacity-50 hover:opacity-100">-10s</button>
+                    <button onClick={skipForward} className="text-[10px] label-caps opacity-50 hover:opacity-100">+10s</button>
+                  </div>
                   <span>{formatTime(duration)}</span>
                </div>
              </div>
@@ -770,7 +837,41 @@ export default function Quran() {
           </button>
           
           {isDetailsOpen && (
-            <div className="p-6 border-t border-outline/10 bg-surface-container/30">
+            <div className="p-6 border-t border-outline/10 bg-surface-container/30 space-y-6">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary opacity-50" />
+                <input 
+                  type="text" 
+                  placeholder="Switch Surah (Name or Verse Count)..."
+                  value={surahSearch}
+                  onChange={(e) => setSurahSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-surface text-xs rounded border border-outline/10 focus:ring-1 focus:ring-primary outline-none transition-all"
+                />
+                {surahSearch && (
+                  <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-surface border border-outline/10 rounded shadow-xl max-h-[200px] overflow-y-auto overflow-x-hidden animate-in fade-in slide-in-from-top-2">
+                    {allSurahs.filter(s => 
+                      s.name_simple.toLowerCase().includes(surahSearch.toLowerCase()) || 
+                      s.verses_count.toString() === surahSearch
+                    ).map(s => (
+                      <button 
+                        key={s.id}
+                        onClick={() => {
+                          selectSurahOrJuz('surah', s.id.toString(), s.name_simple);
+                          setSurahSearch('');
+                        }}
+                        className="w-full p-3 flex items-center justify-between hover:bg-primary/5 text-left border-b border-outline/5 last:border-0"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-mono opacity-40">{s.id}</span>
+                          <span className="text-xs font-bold">{s.name_simple}</span>
+                        </div>
+                        <span className="text-[10px] label-caps opacity-50">{s.verses_count} Verses</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {loadingDetails ? (
                 <div className="flex justify-center py-4"><Loader2 className="animate-spin text-primary" /></div>
               ) : surahInfo ? (
@@ -791,7 +892,14 @@ export default function Quran() {
                     <p className="label-caps !text-[10px] opacity-50">Revelation</p>
                     <p className="text-lg font-serif capitalize">{surahInfo.revelation_place}</p>
                   </div>
-                  <div className="md:col-span-2 lg:col-span-4 flex justify-end">
+                  <div className="md:col-span-2 lg:col-span-4 flex justify-between items-center bg-primary/5 p-4 rounded-lg border border-primary/10">
+                    <button 
+                      onClick={() => togglePlay({ id: surahInfo.id.toString(), name: surahInfo.name_simple, surahId: surahInfo.id })}
+                      className="flex items-center gap-3 px-6 py-2 bg-primary text-on-primary rounded-full label-caps !text-[10px] hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"
+                    >
+                      {currentAudio?.id === surahInfo.id.toString() && isPlaying ? <Pause size={14} /> : <Play size={14} />}
+                      {currentAudio?.id === surahInfo.id.toString() && isPlaying ? "Pause Recitation" : "Listen to Surah"}
+                    </button>
                     <a 
                       href={`https://quran.com/${surahInfo.id}`} 
                       target="_blank" 

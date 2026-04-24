@@ -12,13 +12,7 @@ export interface SurahInfo {
 
 export async function fetchSurahDetails(surahNameOrId: string | number): Promise<SurahInfo | null> {
   try {
-    // We fetch all chapters and find the matching one to be robust against spelling differences
-    const response = await fetch('https://api.quran.com/api/v4/chapters');
-    if (!response.ok) throw new Error('API request failed');
-    
-    const data = await response.json();
-    const chapters: SurahInfo[] = data.chapters;
-
+    const chapters = await fetchAllSurahs();
     if (typeof surahNameOrId === 'number') {
       return chapters.find(c => c.id === surahNameOrId) || null;
     }
@@ -36,14 +30,27 @@ export async function fetchSurahDetails(surahNameOrId: string | number): Promise
 
 export async function fetchAllSurahs(): Promise<SurahInfo[]> {
   try {
-    const response = await fetch('https://api.quran.com/api/v4/chapters');
-    if (!response.ok) throw new Error('API request failed');
+    // Using qurani.ai specialized endpoint for English data
+    const response = await fetch('https://qurani.ai/api/chapters/en');
+    if (!response.ok) {
+      // Fallback to quran.com if qurani.ai specific path fails
+      const fallbackResponse = await fetch('https://api.quran.com/api/v4/chapters');
+      const data = await fallbackResponse.json();
+      return data.chapters;
+    }
     const data = await response.json();
     return data.chapters;
   } catch (error) {
     console.error("Error fetching all Surahs:", error);
     return [];
   }
+}
+
+export function getAudioUrl(surahId: number): string {
+  // qurani.ai provides direct high-quality audio streams
+  // Format: surahId padded to 3 digits
+  const paddedId = surahId.toString().padStart(3, '0');
+  return `https://qurani.ai/audio/recitation/en/${paddedId}.mp3`;
 }
 
 export function getJuzs() {
