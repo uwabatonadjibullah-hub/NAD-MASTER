@@ -25,7 +25,6 @@
         android:background="@color/surface"
         app:itemIconTint="@color/on_surface_variant"
         app:itemTextColor="@color/on_surface_variant"
-        app:itemActiveIndicatorColor="@color/surface_container"
         app:labelVisibilityMode="labeled"
         app:menu="@menu/bottom_nav_menu" />
 
