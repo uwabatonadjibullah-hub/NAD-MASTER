@@ -47,45 +47,50 @@ export default function Chat() {
 
     try {
       if (!import.meta.env.VITE_GEMINI_API_KEY) {
-        throw new Error('Gemini API key is not configured. Please ensure VITE_GEMINI_API_KEY is set.');
+        throw new Error('Gemini API key is not configured.');
       }
+
+      // Build the full conversation history for context
+      const conversationHistory = messages.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }));
+      conversationHistory.push({ role: 'user', parts: [{ text: userMessage.content }] });
+
       const response = await ai.models.generateContent({
         model: "gemini-2.0-flash",
-        contents: [
-          { role: 'user', parts: [{ text: userMessage.content }] }
-        ],
+        contents: conversationHistory,
         config: {
           systemInstruction: SYSTEM_INSTRUCTIONS,
-          tools: tools,
-          safetySettings: safetySettings,
         }
       });
 
-      const assistantMessagePart = response.text || "";
-      const functionCalls = response.functionCalls;
+      const replyText = response.text ?? "I apologize, I could not generate a response.";
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: assistantMessagePart || (functionCalls ? "I have prepared a plan for you based on our discussion. Would you like to review and accept it?" : "I apologize, I could not generate a response."),
+        content: replyText,
         timestamp: new Date(),
-        planData: functionCalls ? functionCalls[0] : null,
       };
 
       setMessages(prev => [...prev, assistantMessage]);
 
-      // Save to Firestore (optional, but good for persistence)
+      // Persist to Firestore
       if (auth.currentUser) {
-        await addDoc(collection(db, 'users', auth.currentUser.uid, 'chats'), {
+        const uid = auth.currentUser.uid;
+        const chatCol = collection(db, 'users', uid, 'chats');
+        await addDoc(chatCol, {
           content: userMessage.content,
           role: 'user',
+          userId: uid,
           createdAt: serverTimestamp(),
         });
-        await addDoc(collection(db, 'users', auth.currentUser.uid, 'chats'), {
+        await addDoc(chatCol, {
           content: assistantMessage.content,
           role: 'assistant',
+          userId: uid,
           createdAt: serverTimestamp(),
-          planData: assistantMessage.planData || null,
         });
       }
 
@@ -93,7 +98,7 @@ export default function Chat() {
       console.error("AI Response failed:", error);
       const errMsg = error?.message?.includes('API key')
         ? 'AI is not configured. Please contact the admin.'
-        : 'Sorry, I encountered an error. Please try again.';
+        : `Sorry, I encountered an error: ${error?.message ?? 'Unknown error'}. Please try again.`;
       setMessages(prev => [...prev, {
         id: (Date.now() + 2).toString(),
         role: 'assistant',
