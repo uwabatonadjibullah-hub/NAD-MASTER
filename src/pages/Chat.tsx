@@ -46,8 +46,11 @@ export default function Chat() {
     setIsTyping(true);
 
     try {
+      if (!import.meta.env.VITE_GEMINI_API_KEY) {
+        throw new Error('Gemini API key is not configured. Please ensure VITE_GEMINI_API_KEY is set.');
+      }
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-04-17",
+        model: "gemini-2.0-flash",
         contents: [
           { role: 'user', parts: [{ text: userMessage.content }] }
         ],
@@ -86,8 +89,17 @@ export default function Chat() {
         });
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Response failed:", error);
+      const errMsg = error?.message?.includes('API key')
+        ? 'AI is not configured. Please contact the admin.'
+        : 'Sorry, I encountered an error. Please try again.';
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 2).toString(),
+        role: 'assistant',
+        content: errMsg,
+        timestamp: new Date(),
+      }]);
     } finally {
       setIsTyping(false);
     }
