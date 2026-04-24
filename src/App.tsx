@@ -16,10 +16,12 @@ import Chat from './pages/Chat';
 import Login from './pages/Login';
 import Navigation from './components/Navigation';
 import TopAppBar from './components/TopAppBar';
+import SideDrawer from './components/SideDrawer';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -40,7 +42,16 @@ export default function App() {
   return (
     <Router>
       <div className="min-h-screen bg-[#151312] text-[#e7e1e0] font-sans selection:bg-[#d6c3b5]/30">
-        {user && <TopAppBar user={user} />}
+        {user && (
+          <>
+            <TopAppBar user={user} onMenuClick={() => setSidebarOpen(true)} />
+            <SideDrawer
+              isOpen={sidebarOpen}
+              onClose={() => setSidebarOpen(false)}
+              user={user}
+            />
+          </>
+        )}
         <main className={`${user ? 'pt-16 pb-20 md:pb-0' : ''}`}>
           <Routes>
             <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
