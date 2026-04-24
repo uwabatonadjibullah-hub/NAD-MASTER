@@ -85,6 +85,49 @@
         "metadata": { "type": "object" }
       },
       "required": ["userId", "role", "content"]
+    },
+    "JournalEntry": {
+      "title": "Journal Entry",
+      "description": "User's daily reflections and thoughts.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "content": { "type": "string" },
+        "prompt": { "type": "string" },
+        "source": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "content", "date"]
+    },
+    "QuranDayProgress": {
+      "title": "Daily Quran Progress Snapshot",
+      "description": "Records the number of verses memorized on a specific date.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "count": { "type": "integer" },
+        "target": { "type": "integer" }
+      },
+      "required": ["userId", "date", "count"]
+    },
+    "QuranGoal": {
+      "title": "Quran Memorization Goal",
+      "description": "A specific target for Quran memorization or revision.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["surah", "juz"] },
+        "targetId": { "type": "string", "description": "ID of the Surah or Juz number" },
+        "targetName": { "type": "string", "description": "Name of the Surah or Juz" },
+        "deadline": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["active", "completed", "failed"] },
+        "progress": { "type": "number", "description": "Percentage completion" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "type", "targetId", "status"]
     }
   },
   "firestore": {
@@ -100,13 +143,25 @@
       "schema": "QuranProgress",
       "description": "User's Quran progress summary."
     },
+    "users/{userId}/quranHistory/{date}": {
+      "schema": "QuranDayProgress",
+      "description": "Daily snapshots of Quran memorization progress."
+    },
     "users/{userId}/goals/{goalId}": {
       "schema": "Goal",
       "description": "User's discipline goals."
     },
+    "users/{userId}/quranGoals/{goalId}": {
+      "schema": "QuranGoal",
+      "description": "User's specific Quran memorization targets."
+    },
     "users/{userId}/chats/{messageId}": {
       "schema": "ChatMessage",
       "description": "User's interaction history with the AI."
+    },
+    "users/{userId}/journal/{entryId}": {
+      "schema": "JournalEntry",
+      "description": "User's collection of daily reflections."
     }
   }
 }

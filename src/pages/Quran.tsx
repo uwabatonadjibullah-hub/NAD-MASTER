@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { BookOpen, Check, ChevronUp, Info, ChevronRight, Hand, Loader2, Save, Play, Pause, Volume2, Music, Flame, Award, Calendar, Download, ChevronDown, ExternalLink } from 'lucide-react';
+import { BookOpen, Check, ChevronUp, Info, ChevronRight, Hand, Loader2, Save, Play, Pause, Volume2, Music, Flame, Award, Calendar, Download, ChevronDown, ExternalLink, TrendingUp, Search, Target, Plus, Trash2, Clock, Trophy } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
-import { doc, onSnapshot, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, setDoc, serverTimestamp, collection, query, orderBy, limit, getDocs, addDoc, deleteDoc, where } from 'firebase/firestore';
 import { fetchAudioFiles, getAudioStreamUrl, DriveFile } from '../services/driveService';
-import { fetchSurahDetails, SurahInfo } from '../services/quranService';
+import { fetchSurahDetails, SurahInfo, fetchAllSurahs, getJuzs } from '../services/quranService';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
 interface QuranProgress {
   userId: string;
@@ -20,18 +21,46 @@ interface QuranProgress {
   lastResetDate?: string;
 }
 
+interface QuranGoal {
+  id: string;
+  title: string;
+  type: 'surah' | 'juz';
+  targetId: string;
+  targetName: string;
+  deadline: string;
+  status: 'active' | 'completed' | 'failed';
+  progress: number;
+}
+
 export default function Quran() {
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<QuranProgress | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   
+  // Goals State
+  const [quranGoals, setQuranGoals] = useState<QuranGoal[]>([]);
+  const [showGoalModal, setShowGoalModal] = useState(false);
+  const [isCreatingGoal, setIsCreatingGoal] = useState(false);
+
+  // Selector State
+  const [allSurahs, setAllSurahs] = useState<SurahInfo[]>([]);
+  const [showSelector, setShowSelector] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectorTab, setSelectorTab] = useState<'surah' | 'juz'>('surah');
+
   // Audio State
   const [audioFiles, setAudioFiles] = useState<DriveFile[]>([]);
   const [currentAudio, setCurrentAudio] = useState<DriveFile | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [isDownloadingBatch, setIsDownloadingBatch] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Visualization State
+  const [historyData, setHistoryData] = useState<any[]>([]);
 
   // Surah Details State
   const [surahInfo, setSurahInfo] = useState<SurahInfo | null>(null);
@@ -42,14 +71,25 @@ export default function Quran() {
     if (!auth.currentUser) return;
 
     const docRef = doc(db, 'users', auth.currentUser.uid, 'quranProgress', 'main');
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+    const unsubscribe = onSnapshot(docRef, async (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as QuranProgress;
         const today = new Date().toISOString().split('T')[0];
 
-        // Daily Reset Logic
+        // Daily Reset & History Logging Logic
         if (data.lastResetDate !== today) {
-          updateDoc(docRef, {
+          if (data.lastResetDate) {
+            // Save snapshot of the day that just ended
+            const historyRef = doc(db, 'users', auth.currentUser!.uid, 'quranHistory', data.lastResetDate);
+            await setDoc(historyRef, {
+              userId: auth.currentUser!.uid,
+              date: data.lastResetDate,
+              count: data.versesToday || 0,
+              target: data.dailyTarget || 10
+            });
+          }
+
+          await updateDoc(docRef, {
             versesToday: 0,
             lastResetDate: today,
           });
@@ -81,7 +121,39 @@ export default function Quran() {
     };
     loadAudio();
 
-    return () => unsubscribe();
+    // Load History for Chart
+    const loadHistory = () => {
+      const historyRef = collection(db, 'users', auth.currentUser!.uid, 'quranHistory');
+      const q = query(historyRef, orderBy('date', 'desc'), limit(7));
+      return onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map(doc => doc.data()).reverse();
+        setHistoryData(data.map(d => ({
+          date: d.date.split('-').slice(2).join('/'), // DD
+          verses: d.count,
+          target: d.target
+        })));
+      });
+    };
+    const unsubscribeHistory = loadHistory();
+
+    // Load All Surahs
+    fetchAllSurahs().then(setAllSurahs);
+
+    // Load Quran Goals
+    const loadGoals = () => {
+      const goalsRef = collection(db, 'users', auth.currentUser!.uid, 'quranGoals');
+      return onSnapshot(goalsRef, (snapshot) => {
+        const goals = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as QuranGoal[];
+        setQuranGoals(goals);
+      });
+    };
+    const unsubscribeGoals = loadGoals();
+
+    return () => {
+      unsubscribe();
+      unsubscribeHistory();
+      unsubscribeGoals();
+    };
   }, []);
 
   // Fetch Surah Info when it changes
@@ -210,11 +282,109 @@ export default function Quran() {
     } else {
       setCurrentAudio(file);
       setIsPlaying(true);
+      setCurrentTime(0);
       if (audioRef.current) {
         audioRef.current.src = getAudioStreamUrl(file.id);
         audioRef.current.play();
       }
     }
+  };
+
+  const formatTime = (time: number) => {
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+      setDuration(audioRef.current.duration);
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = parseFloat(e.target.value);
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+      setCurrentTime(time);
+    }
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const vol = parseFloat(e.target.value);
+    setVolume(vol);
+    if (audioRef.current) {
+      audioRef.current.volume = vol;
+    }
+  };
+
+  const createGoal = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!auth.currentUser) return;
+    setIsCreatingGoal(true);
+
+    const formData = new FormData(e.currentTarget);
+    const type = formData.get('type') as 'surah' | 'juz';
+    const targetId = formData.get('targetId') as string;
+    const deadline = formData.get('deadline') as string;
+
+    let targetName = '';
+    if (type === 'surah') {
+      const surah = allSurahs.find(s => s.id.toString() === targetId);
+      targetName = surah ? surah.name_simple : '';
+    } else {
+      targetName = `Juz ${targetId}`;
+    }
+
+    try {
+      const goalsRef = collection(db, 'users', auth.currentUser.uid, 'quranGoals');
+      await addDoc(goalsRef, {
+        userId: auth.currentUser.uid,
+        title: `Memorize ${targetName}`,
+        type,
+        targetId,
+        targetName,
+        deadline,
+        status: 'active',
+        progress: 0,
+        createdAt: serverTimestamp()
+      });
+      setShowGoalModal(false);
+    } catch (error) {
+      console.error("Create goal failed:", error);
+    } finally {
+      setIsCreatingGoal(false);
+    }
+  };
+
+  const deleteGoal = async (id: string) => {
+    if (!auth.currentUser) return;
+    try {
+      const goalRef = doc(db, 'users', auth.currentUser.uid, 'quranGoals', id);
+      await deleteDoc(goalRef);
+    } catch (error) {
+      console.error("Delete goal failed:", error);
+    }
+  };
+
+  const updateGoalStatus = async (id: string, status: 'completed' | 'failed' | 'active') => {
+    if (!auth.currentUser) return;
+    try {
+      const goalRef = doc(db, 'users', auth.currentUser.uid, 'quranGoals', id);
+      await updateDoc(goalRef, { status });
+    } catch (error) {
+      console.error("Update goal status failed:", error);
+    }
+  };
+
+  const selectSurahOrJuz = (type: 'surah' | 'juz', id: string, name: string) => {
+    if (type === 'surah') {
+      handleQuickUpdate({ currentSurah: name });
+    } else {
+      handleQuickUpdate({ currentJuzz: parseInt(id) });
+    }
+    setShowSelector(false);
   };
 
   if (loading) {
@@ -227,8 +397,174 @@ export default function Quran() {
 
   const completionPercentage = progress ? Math.round((progress.memorizedVerses / progress.totalVerses) * 100) : 0;
 
+  const filteredSurahs = allSurahs.filter(s => 
+    s.name_simple.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.translated_name.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-12">
+      {/* Search/Selector Modal */}
+      {showSelector && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-surface/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="ledger-card w-full max-w-lg max-h-[80vh] flex flex-col p-0 overflow-hidden shadow-2xl border-primary/20">
+            <div className="p-6 border-b border-outline/10 space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-serif font-bold">Quick Navigation</h3>
+                <button onClick={() => setShowSelector(false)} className="p-2 hover:bg-outline/5 rounded-full transition-colors">
+                  <Check size={20} className="rotate-45" />
+                </button>
+              </div>
+              
+              <div className="flex gap-2 p-1 bg-surface-container rounded-lg">
+                <button 
+                  onClick={() => setSelectorTab('surah')}
+                  className={cn(
+                    "flex-1 py-2 label-caps !text-[10px] rounded transition-all",
+                    selectorTab === 'surah' ? "bg-surface text-primary shadow-sm" : "opacity-50 hover:opacity-100"
+                  )}
+                >
+                  By Surah
+                </button>
+                <button 
+                  onClick={() => setSelectorTab('juz')}
+                  className={cn(
+                    "flex-1 py-2 label-caps !text-[10px] rounded transition-all",
+                    selectorTab === 'juz' ? "bg-surface text-primary shadow-sm" : "opacity-50 hover:opacity-100"
+                  )}
+                >
+                  By Juzz
+                </button>
+              </div>
+
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-outline/50" />
+                <input 
+                  type="text" 
+                  placeholder={selectorTab === 'surah' ? "Search Surah name..." : "Search Juzz number..."}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-surface-container-high rounded border border-outline/10 focus:ring-1 focus:ring-primary outline-none transition-all"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2">
+              {selectorTab === 'surah' ? (
+                <div className="grid grid-cols-1 gap-1">
+                  {filteredSurahs.map(s => (
+                    <button 
+                      key={s.id}
+                      onClick={() => selectSurahOrJuz('surah', s.id.toString(), s.name_simple)}
+                      className="w-full p-4 flex items-center justify-between rounded hover:bg-primary/5 group text-left transition-colors"
+                    >
+                      <div className="flex items-center gap-4">
+                        <span className="text-[10px] font-mono opacity-40">{s.id.toString().padStart(3, '0')}</span>
+                        <div>
+                          <p className="font-bold text-sm tracking-wide">{s.name_simple}</p>
+                          <p className="text-[10px] opacity-50 font-serif italic">{s.translated_name.name}</p>
+                        </div>
+                      </div>
+                      <span className="text-xl font-serif text-primary opacity-0 group-hover:opacity-100 transition-opacity">{s.name_arabic}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2 p-2">
+                  {getJuzs().map(j => (
+                    <button 
+                      key={j.id}
+                      onClick={() => selectSurahOrJuz('juz', j.id.toString(), j.name)}
+                      className="p-4 rounded border border-outline/10 hover:border-primary/50 hover:bg-primary/5 flex flex-col items-center justify-center gap-1 transition-all"
+                    >
+                      <span className="text-[10px] label-caps opacity-50">Juzz</span>
+                      <span className="text-xl font-serif font-bold">{j.id}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Goal Modal */}
+      {showGoalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-surface/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <form onSubmit={createGoal} className="ledger-card w-full max-w-md p-0 overflow-hidden shadow-2xl border-secondary/20">
+            <div className="p-6 border-b border-outline/10 flex justify-between items-center bg-secondary/5">
+              <div className="flex items-center gap-2">
+                <Target size={20} className="text-secondary" />
+                <h3 className="text-xl font-serif font-bold">New Hijrah Goal</h3>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowGoalModal(false)} 
+                className="p-2 hover:bg-outline/5 rounded-full transition-colors"
+              >
+                <Check size={20} className="rotate-45" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="space-y-4">
+                 <label className="block">
+                    <span className="label-caps !text-[10px] mb-2 block opacity-50">Goal Type</span>
+                    <select name="type" className="w-full p-3 bg-surface-container rounded border border-outline/10 focus:ring-1 focus:ring-secondary transition-all">
+                      <option value="surah">Specific Surah</option>
+                      <option value="juz">Specific Juzz</option>
+                    </select>
+                 </label>
+
+                 <label className="block">
+                    <span className="label-caps !text-[10px] mb-2 block opacity-50">Target Identifier</span>
+                    <select name="targetId" className="w-full p-3 bg-surface-container rounded border border-outline/10 focus:ring-1 focus:ring-secondary transition-all">
+                      {allSurahs.map(s => <option key={s.id} value={s.id}>{s.name_simple}</option>)}
+                      {[...Array(30)].map((_, i) => <option key={i} value={i+1}>Juzz {i+1}</option>)}
+                    </select>
+                 </label>
+
+                 <label className="block">
+                    <span className="label-caps !text-[10px] mb-2 block opacity-50">Deadline</span>
+                    <input 
+                      type="date" 
+                      name="deadline" 
+                      required
+                      className="w-full p-3 bg-surface-container rounded border border-outline/10 focus:ring-1 focus:ring-secondary transition-all"
+                    />
+                 </label>
+              </div>
+
+              <div className="bg-secondary/5 p-4 rounded-lg border border-secondary/10 flex gap-3 italic">
+                 <Info size={16} className="text-secondary shrink-0 mt-0.5" />
+                 <p className="text-[10px] leading-relaxed">
+                   Establish clear intentions. Discipline today is peace tomorrow.
+                 </p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-outline/5 border-t border-outline/10 flex justify-end gap-3">
+               <button 
+                type="button"
+                onClick={() => setShowGoalModal(false)}
+                className="px-6 py-2 label-caps !text-[10px] hover:bg-outline/10 rounded transition-colors"
+               >
+                 Cancel
+               </button>
+               <button 
+                type="submit"
+                disabled={isCreatingGoal}
+                className="px-8 py-2 bg-secondary text-on-secondary label-caps !text-[10px] rounded hover:opacity-90 transition-opacity flex items-center gap-2"
+               >
+                 {isCreatingGoal ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                 Set Target
+               </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Header */}
       <section className="space-y-4 text-center md:text-left">
         <h2 className="text-4xl font-serif font-bold">Quran Tracking</h2>
@@ -271,20 +607,58 @@ export default function Quran() {
               </div>
             )}
             {currentAudio && (
-              <div className="hidden lg:flex items-center gap-4 animate-in fade-in zoom-in-95">
-              <span className="text-xs font-serif italic truncate max-w-[200px]">Now playing: {currentAudio.name}</span>
-              <audio 
-                ref={audioRef} 
-                onPlay={() => setIsPlaying(true)} 
-                onPause={() => setIsPlaying(false)}
-                onEnded={() => setIsPlaying(false)}
-                controls className="h-8" 
-              />
-            </div>
-          )}
+              <div className="hidden lg:flex items-center gap-6 animate-in fade-in zoom-in-95 bg-surface-container-high/50 p-2 pr-4 rounded-full border border-outline/10">
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => togglePlay(currentAudio)}
+                    className="w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center transition-all hover:scale-105"
+                  >
+                    {isPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
+                  </button>
+                  <div className="flex flex-col min-w-[120px]">
+                    <span className="text-[10px] font-serif italic truncate max-w-[150px]">{currentAudio.name}</span>
+                    <div className="flex items-center gap-2">
+                       <span className="text-[8px] opacity-50">{formatTime(currentTime)}</span>
+                       <input 
+                          type="range" 
+                          min="0" 
+                          max={duration || 100} 
+                          value={currentTime} 
+                          onChange={handleSeek}
+                          className="h-1 w-24 bg-secondary/20 rounded-full appearance-none cursor-pointer accent-secondary"
+                       />
+                       <span className="text-[8px] opacity-50">{formatTime(duration)}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2 border-l border-outline/10 pl-4 ml-1">
+                   <Volume2 size={12} className="opacity-50" />
+                   <input 
+                      type="range" 
+                      min="0" 
+                      max="1" 
+                      step="0.1" 
+                      value={volume} 
+                      onChange={handleVolumeChange}
+                      className="h-1 w-12 bg-outline/20 rounded-full appearance-none cursor-pointer accent-secondary"
+                   />
+                </div>
+
+                <audio 
+                  ref={audioRef} 
+                  onPlay={() => setIsPlaying(true)} 
+                  onPause={() => setIsPlaying(false)}
+                  onEnded={() => setIsPlaying(false)}
+                  onTimeUpdate={handleTimeUpdate}
+                  onLoadedMetadata={handleTimeUpdate}
+                />
+              </div>
+            )}
         </div>
+      </div>
         
-        <div className="max-h-[300px] overflow-y-auto divide-y divide-outline/10">
+      <div className="max-h-[300px] overflow-y-auto divide-y divide-outline/10">
           {audioFiles.length === 0 ? (
             <div className="p-12 text-center space-y-4">
               <Volume2 className="mx-auto text-outline/30" size={48} />
@@ -337,19 +711,46 @@ export default function Quran() {
 
         {/* Mobile Mini Player */}
         {currentAudio && (
-          <div className="md:hidden p-4 bg-surface-container border-t border-secondary/20 flex items-center gap-4">
-             <button 
-                onClick={() => togglePlay(currentAudio)}
-                className="w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center shrink-0"
-              >
-                {isPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
-              </button>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] italic truncate">{currentAudio.name}</p>
-                <div className="w-full bg-secondary/10 h-1 rounded-full mt-1">
-                   <div className="bg-secondary h-full rounded-full w-1/3" />
+          <div className="md:hidden p-4 bg-surface-container border-t border-secondary/20 space-y-3">
+             <div className="flex items-center gap-4">
+               <button 
+                  onClick={() => togglePlay(currentAudio)}
+                  className="w-10 h-10 rounded-full bg-secondary text-on-secondary flex items-center justify-center shrink-0 shadow-lg shadow-secondary/20"
+                >
+                  {isPlaying ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold truncate">{currentAudio.name}</p>
+                  <p className="text-[10px] opacity-50 font-serif italic">NAD MASTER Training Audio</p>
                 </div>
-              </div>
+                <div className="flex items-center gap-2">
+                   <Volume2 size={12} className="opacity-50" />
+                   <input 
+                      type="range" 
+                      min="0" 
+                      max="1" 
+                      step="0.1" 
+                      value={volume} 
+                      onChange={handleVolumeChange}
+                      className="h-1 w-12 bg-outline/20 rounded-full appearance-none cursor-pointer accent-secondary"
+                   />
+                </div>
+             </div>
+             
+             <div className="space-y-1">
+               <input 
+                  type="range" 
+                  min="0" 
+                  max={duration || 100} 
+                  value={currentTime} 
+                  onChange={handleSeek}
+                  className="w-full h-1 bg-secondary/10 rounded-full appearance-none cursor-pointer accent-secondary"
+               />
+               <div className="flex justify-between text-[8px] opacity-40 font-mono">
+                  <span>{formatTime(currentTime)}</span>
+                  <span>{formatTime(duration)}</span>
+               </div>
+             </div>
           </div>
         )}
       </section>
@@ -466,11 +867,11 @@ export default function Quran() {
                 <span className="label-caps !text-[10px]">+1 Verse</span>
               </button>
               <button 
-                onClick={() => handleQuickUpdate({ currentJuzz: (progress?.currentJuzz || 1) + 1 })}
-                className="py-3 px-4 bg-surface-container hover:bg-surface-container-high rounded border border-outline/10 transition-colors flex items-center justify-center gap-2"
+                onClick={() => setShowSelector(true)}
+                className="py-3 px-4 bg-primary/10 text-primary hover:bg-primary/20 rounded border border-primary/20 transition-colors flex items-center justify-center gap-2"
               >
-                <ChevronUp size={16} />
-                <span className="label-caps !text-[10px]">+1 Juzz</span>
+                <Search size={16} />
+                <span className="label-caps !text-[10px]">Jump to...</span>
               </button>
             </div>
           </div>
@@ -478,13 +879,108 @@ export default function Quran() {
           <div className="flex flex-col justify-end">
             <div className="flex justify-between items-center mb-2">
               <span className="label-caps">Current Surah</span>
-              <span className="font-serif italic text-primary">{progress?.currentSurah}</span>
+              <button 
+                onClick={() => setShowSelector(true)}
+                className="font-serif italic text-primary hover:underline"
+              >
+                {progress?.currentSurah}
+              </button>
             </div>
             <div className="flex justify-between items-center mb-2">
               <span className="label-caps">Last Synced</span>
               <span className="text-xs opacity-50">{progress?.lastUpdated ? new Date(progress.lastUpdated.seconds * 1000).toLocaleString() : 'Never'}</span>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Quran Goals Section (NEW) */}
+      <section className="space-y-6">
+        <div className="flex justify-between items-end border-b border-outline/10 pb-2">
+          <div className="flex items-center gap-2">
+            <Trophy size={20} className="text-secondary" />
+            <h3 className="text-2xl font-serif font-bold">Memorization Milestones</h3>
+          </div>
+          <button 
+            onClick={() => setShowGoalModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-secondary text-on-secondary rounded label-caps !text-[10px] hover:opacity-90 transition-opacity"
+          >
+            <Plus size={14} />
+            Set New Goal
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {quranGoals.length === 0 ? (
+            <div className="md:col-span-2 lg:col-span-3 p-12 text-center ledger-card bg-outline/5 border-dashed">
+              <Target size={48} className="mx-auto text-outline/30 mb-4" />
+              <p className="text-on-surface-variant italic">No active milestones. Set a target to gamify your journey.</p>
+            </div>
+          ) : (
+            quranGoals.map(goal => (
+              <div key={goal.id} className={cn(
+                "ledger-card relative overflow-hidden flex flex-col justify-between group transition-all",
+                goal.status === 'completed' ? "bg-green-50 border-green-200" : "hover:border-secondary/30"
+              )}>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className={cn(
+                        "label-caps !text-[9px] px-2 py-0.5 rounded-full mb-1 inline-block",
+                        goal.type === 'surah' ? "bg-primary/10 text-primary" : "bg-secondary/10 text-secondary"
+                      )}>
+                        {goal.type === 'surah' ? 'Surah Target' : 'Juzz Target'}
+                      </span>
+                      <h4 className="text-lg font-serif font-bold group-hover:text-secondary transition-colors line-clamp-1">{goal.title}</h4>
+                    </div>
+                    <button 
+                      onClick={() => deleteGoal(goal.id)}
+                      className="p-1 text-on-surface-variant opacity-0 group-hover:opacity-100 hover:text-error transition-all"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-[10px] label-caps opacity-50">
+                      <span>Progress</span>
+                      <span>{goal.progress}%</span>
+                    </div>
+                    <div className="w-full bg-outline/10 h-1.5 rounded-full overflow-hidden">
+                      <div 
+                        className={cn("h-full transition-all duration-1000", goal.status === 'completed' ? "bg-green-600" : "bg-secondary")} 
+                        style={{ width: `${goal.progress}%` }} 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 py-1">
+                    <div className="flex items-center gap-1.5 text-xs opacity-60">
+                      <Clock size={12} />
+                      <span>{new Date(goal.deadline).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex gap-2">
+                  {goal.status === 'active' ? (
+                    <button 
+                      onClick={() => updateGoalStatus(goal.id, 'completed')}
+                      className="flex-1 py-2 bg-secondary text-on-secondary label-caps !text-[9px] rounded flex items-center justify-center gap-2 hover:opacity-90"
+                    >
+                      <Check size={12} />
+                      Complete
+                    </button>
+                  ) : (
+                    <div className="flex-1 py-2 bg-green-600 text-white label-caps !text-[9px] rounded flex items-center justify-center gap-2">
+                      <Award size={12} />
+                      Achieved
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </section>
 
@@ -504,28 +1000,83 @@ export default function Quran() {
           </div>
         </div>
 
-        <div className="md:col-span-2 ledger-card relative overflow-hidden">
-          <div className="flex justify-between items-start">
-            <span className="label-caps">Performance over time</span>
+        <div className="md:col-span-2 ledger-card relative overflow-hidden flex flex-col">
+          <div className="flex justify-between items-start mb-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp size={16} className="text-primary" />
+              <span className="label-caps">Consistency Insights</span>
+            </div>
             <div className="text-right">
-              <div className="text-2xl font-serif font-bold">145</div>
-              <div className="label-caps !text-[10px]">Verses this week</div>
+              <div className="text-2xl font-serif font-bold text-primary">
+                {historyData.reduce((acc, curr) => acc + curr.verses, 0)}
+              </div>
+              <div className="label-caps !text-[10px]">Verses in 7 days</div>
             </div>
           </div>
-          {/* Simple Chart Visualization */}
-          <div className="h-24 w-full mt-6 flex items-end justify-between px-2 pb-6 border-b border-outline/10 overflow-hidden relative">
-            {[30, 45, 50, 60, 70, 65, 80].map((height, i) => (
-              <div 
-                key={i} 
-                style={{ height: `${height}%` }}
-                className="w-1/12 bg-primary/40 rounded-t-sm transition-all hover:bg-primary"
-              />
-            ))}
+          
+          <div className="flex-1 w-full min-h-[150px]">
+            {historyData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={150}>
+                <AreaChart data={historyData}>
+                  <defs>
+                    <linearGradient id="colorVerses" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.1} />
+                  <XAxis 
+                    dataKey="date" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 10, fill: 'currentColor', opacity: 0.5 }}
+                  />
+                  <YAxis hide={true} domain={[0, 'dataMax + 5']} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'var(--color-surface)', 
+                      border: '1px solid var(--color-outline-variant)',
+                      fontSize: '10px',
+                      borderRadius: '4px'
+                    }}
+                    labelStyle={{ color: 'var(--color-primary)', fontWeight: 'bold' }}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="verses" 
+                    stroke="var(--color-primary)" 
+                    fillOpacity={1} 
+                    fill="url(#colorVerses)" 
+                    strokeWidth={2}
+                    animationDuration={1500}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="target" 
+                    stroke="var(--color-secondary)" 
+                    strokeDasharray="5 5" 
+                    dot={false}
+                    strokeOpacity={0.5}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-xs italic opacity-30">
+                Awaiting more progress data to visualize your journey...
+              </div>
+            )}
           </div>
-          <div className="flex justify-between px-2 mt-2">
-            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(day => (
-              <span key={day} className="label-caps !text-[10px] opacity-40">{day}</span>
-            ))}
+          
+          <div className="flex justify-between items-center mt-4 pt-4 border-t border-outline/5 text-[10px] label-caps opacity-50">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-primary" />
+              <span>Memorized</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 border border-dashed border-secondary" />
+              <span>Daily Target</span>
+            </div>
+            <div>{new Date().toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</div>
           </div>
         </div>
       </section>

@@ -1,6 +1,40 @@
-import { TrendingUp, Book, Activity, CheckCircle2, XCircle, Quote } from 'lucide-react';
+import { TrendingUp, Book, Activity, CheckCircle2, XCircle, Quote, Sparkles, PenTool, Loader2, Save, History } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { getDailyPrompt, saveJournalEntry, getRecentEntries, ReflectionPrompt } from '../services/reflectionService';
+import { cn } from '../lib/utils';
 
 export default function Home() {
+  const [prompt, setPrompt] = useState<ReflectionPrompt>(getDailyPrompt());
+  const [journalContent, setJournalContent] = useState('');
+  const [recentEntries, setRecentEntries] = useState<any[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    loadRecent();
+  }, []);
+
+  const loadRecent = async () => {
+    const entries = await getRecentEntries(2);
+    setRecentEntries(entries);
+  };
+
+  const handleSave = async () => {
+    if (!journalContent.trim()) return;
+    setIsSaving(true);
+    try {
+      await saveJournalEntry(journalContent, prompt);
+      setJournalContent('');
+      setSaveSuccess(true);
+      loadRecent();
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error) {
+      console.error("Failed to save entry:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const stats = [
     { label: 'Weekly Rate', value: '88%', color: 'secondary' },
     { label: 'Discipline Score', value: '85', color: 'primary' },
@@ -92,14 +126,54 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Hadith Reflection */}
-        <div className="ledger-card relative overflow-hidden flex flex-col justify-center">
-          <Quote className="absolute top-4 right-4 text-primary/10" size={48} />
-          <span className="label-caps mb-4">Daily Reflection</span>
-          <blockquote className="text-2xl font-serif italic leading-relaxed">
-            "The most beloved of deeds to Allah are those that are most consistent, even if it is small."
-          </blockquote>
-          <cite className="text-on-surface-variant mt-4 block not-italic">— Sahih Bukhari</cite>
+        {/* Daily Reflection & Journaling (DYNAMIC) */}
+        <div className="ledger-card bg-secondary/5 border-secondary/10 flex flex-col justify-between overflow-hidden relative">
+          <Sparkles className="absolute top-4 right-4 text-secondary/20" size={32} />
+          
+          <div className="space-y-4">
+            <span className="label-caps !text-secondary">Daily Reflection</span>
+            <blockquote className="text-xl font-serif italic leading-snug">
+              "{prompt.content}"
+            </blockquote>
+            <p className="text-[10px] label-caps opacity-40">— {prompt.source}</p>
+          </div>
+
+          <div className="mt-8 space-y-3">
+             <div className="flex items-center gap-2 mb-1">
+                <PenTool size={14} className="text-secondary opacity-60" />
+                <span className="text-xs font-serif font-bold italic">{prompt.prompt}</span>
+             </div>
+             <textarea 
+                value={journalContent}
+                onChange={(e) => setJournalContent(e.target.value)}
+                placeholder="Journal your thoughts..."
+                className="w-full p-3 bg-surface rounded border border-outline/10 text-sm italic focus:ring-1 focus:ring-secondary/30 transition-all resize-none min-h-[80px]"
+             />
+             <div className="flex justify-between items-center px-1">
+                <div className="flex gap-1.5">
+                  {[...Array(3)].map((_, i) => (
+                    <div 
+                      key={i} 
+                      className={cn(
+                        "w-2 h-2 rounded-full transition-colors",
+                        i < recentEntries.length ? "bg-secondary" : "bg-outline/20"
+                      )} 
+                      title={i < recentEntries.length ? "Recent entry" : "No entry"} 
+                    />
+                  ))}
+                </div>
+                <button 
+                  onClick={handleSave}
+                  disabled={isSaving || !journalContent.trim()}
+                  className={cn(
+                    "px-4 py-1.5 label-caps !text-[10px] rounded transition-all flex items-center gap-2",
+                    saveSuccess ? "bg-green-600 text-white" : "bg-secondary text-on-secondary hover:opacity-90"
+                  )}
+                >
+                  {isSaving ? <Loader2 size={12} className="animate-spin" /> : saveSuccess ? "Recorded" : "Record"}
+                </button>
+             </div>
+          </div>
         </div>
       </section>
 

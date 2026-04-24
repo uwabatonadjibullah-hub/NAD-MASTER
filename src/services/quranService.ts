@@ -33,3 +33,22 @@ export async function fetchSurahDetails(surahNameOrId: string | number): Promise
     return null;
   }
 }
+
+export async function fetchAllSurahs(): Promise<SurahInfo[]> {
+  try {
+    const response = await fetch('https://api.quran.com/api/v4/chapters');
+    if (!response.ok) throw new Error('API request failed');
+    const data = await response.json();
+    return data.chapters;
+  } catch (error) {
+    console.error("Error fetching all Surahs:", error);
+    return [];
+  }
+}
+
+export function getJuzs() {
+  return Array.from({ length: 30 }, (_, i) => ({
+    id: i + 1,
+    name: `Juz ${i + 1}`
+  }));
+}
