@@ -1,6 +1,6 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, HttpsError, CallableRequest } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
-import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 
 // Define the secret to be used in the function
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
@@ -11,7 +11,7 @@ export const chatWithGemini = onCall(
     region: "us-central1", // Adjust to your preferred region
     cors: true,
   },
-  async (request) => {
+  async (request: CallableRequest) => {
     // 1. Basic Authentication Check
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "The function must be called while authenticated.");
@@ -24,7 +24,7 @@ export const chatWithGemini = onCall(
     }
 
     try {
-      const genAI = new GoogleGenAI(geminiApiKey.value());
+      const genAI = new GoogleGenerativeAI(geminiApiKey.value());
       const model = genAI.getGenerativeModel({
         model: "gemini-1.5-pro",
         systemInstruction: systemInstruction,

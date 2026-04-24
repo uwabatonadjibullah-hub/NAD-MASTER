@@ -1,0 +1,96 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.google.gms.google-services'
+}
+
+android {
+    namespace 'nad.master'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "nad.master"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        // Inject GEMINI_AI_KEY from GitHub Actions secret (or local env var for dev)
+        def geminiKey = System.getenv("GEMINI_AI_KEY") ?: ""
+        buildConfigField "String", "GEMINI_API_KEY", "\"${geminiKey}\""
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            // Also inject in debug so dev builds work when env var is set
+            def geminiKey = System.getenv("GEMINI_AI_KEY") ?: ""
+            buildConfigField "String", "GEMINI_API_KEY", "\"${geminiKey}\""
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    buildFeatures {
+        viewBinding true
+        buildConfig true
+    }
+}
+
+dependencies {
+    // AndroidX Core
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.fragment:fragment-ktx:1.7.1'
+
+    // Navigation Component
+    implementation 'androidx.navigation:navigation-fragment-ktx:2.7.7'
+    implementation 'androidx.navigation:navigation-ui-ktx:2.7.7'
+
+    // Lifecycle / ViewModel / LiveData
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.3'
+    implementation 'androidx.lifecycle:lifecycle-livedata-ktx:2.8.3'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.3'
+
+    // RecyclerView
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+
+    // ---- Firebase BoM — manages all Firebase library versions ----
+    implementation platform('com.google.firebase:firebase-bom:34.12.0')
+    implementation 'com.google.firebase:firebase-auth-ktx'
+    implementation 'com.google.firebase:firebase-firestore-ktx'
+    implementation 'com.google.firebase:firebase-analytics-ktx'
+    implementation 'com.google.firebase:firebase-functions-ktx'
+
+    // Google Sign-In
+    implementation 'com.google.android.gms:play-services-auth:21.2.0'
+
+    // Gemini AI — Android SDK (uses BuildConfig.GEMINI_API_KEY at runtime)
+    implementation 'com.google.ai.client.generativeai:generativeai:0.9.0'
+
+    // Coroutines
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3'
+
+    // Markdown rendering (for Chat bubbles)
+    implementation 'io.noties.markwon:core:4.6.2'
+
+    // Testing
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+}

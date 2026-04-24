@@ -1,0 +1,38 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Base application theme -->
+    <style name="Theme.NadMaster" parent="Theme.Material3.Dark">
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorOnPrimary">@color/on_primary</item>
+        <item name="colorPrimaryContainer">@color/surface_container</item>
+        <item name="colorOnPrimaryContainer">@color/on_surface</item>
+        <item name="colorSecondary">@color/primary</item>
+        <item name="colorOnSecondary">@color/on_primary</item>
+        <item name="colorBackground">@color/background</item>
+        <item name="colorOnBackground">@color/on_surface</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorOnSurface">@color/on_surface</item>
+        <item name="colorSurfaceVariant">@color/surface_container</item>
+        <item name="colorOnSurfaceVariant">@color/on_surface_variant</item>
+        <item name="colorOutline">@color/outline</item>
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:windowBackground">@color/background</item>
+    </style>
+
+    <!-- Splash screen theme (no action bar) -->
+    <style name="Theme.NadMaster.Splash" parent="Theme.NadMaster">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowBackground">@color/background</item>
+    </style>
+
+    <!-- Bottom navigation style -->
+    <style name="Widget.NadMaster.BottomNavigationView" parent="Widget.Material3.BottomNavigationView">
+        <item name="backgroundTint">@color/surface</item>
+        <item name="itemIconTint">@color/on_surface_variant</item>
+        <item name="itemTextColor">@color/on_surface_variant</item>
+        <item name="itemActiveIndicatorColor">@color/surface_container</item>
+    </style>
+
+</resources>

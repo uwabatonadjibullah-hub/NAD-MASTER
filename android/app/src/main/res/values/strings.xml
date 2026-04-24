@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">NAD MASTER</string>
+    <string name="sign_in_with_google">Continue with Google</string>
+    <string name="welcome_message">بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ</string>
+    <string name="tagline">Discipline. Mastery. Purpose.</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_schedule">Schedule</string>
+    <string name="nav_quran">Qur\'an</string>
+    <string name="nav_dhikr">Dhikr</string>
+    <string name="nav_chat">AI Chat</string>
+    <string name="send">Send</string>
+    <string name="chat_hint">Ask your mentor…</string>
+    <string name="loading">Loading…</string>
+    <string name="sign_out">Sign Out</string>
+    <!-- Web client ID from google-services.json — required for Google Sign-In -->
+    <string name="default_web_client_id">16718138438-32qh22mn1krk5grvdj4ag9h1v0f6l368.apps.googleusercontent.com</string>
+</resources>

@@ -1,0 +1,21 @@
+<resources>
+    <!-- Brand palette matching the web app -->
+    <color name="background">#151312</color>
+    <color name="surface">#1e1b19</color>
+    <color name="surface_container">#272320</color>
+    <color name="primary">#d6c3b5</color>
+    <color name="on_primary">#151312</color>
+    <color name="on_surface">#e7e1e0</color>
+    <color name="on_surface_variant">#9e9490</color>
+    <color name="outline">#4a4340</color>
+    <color name="error">#f2b8b8</color>
+
+    <!-- Material system colors (required by themes) -->
+    <color name="purple_200">#d6c3b5</color>
+    <color name="purple_500">#d6c3b5</color>
+    <color name="purple_700">#b8a599</color>
+    <color name="teal_200">#a0bfb8</color>
+    <color name="teal_700">#7da8a0</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/tvDhikrTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Dhikr Counter"
+        android:textColor="@color/primary"
+        android:textSize="22sp"
+        android:fontFamily="serif"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- Dhikr selector -->
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/dhikrChipGroup"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toBottomOf="@id/tvDhikrTitle"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="16dp"
+        app:singleSelection="true">
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chipSubhanallah"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SubhanAllah"
+            android:textColor="@color/on_surface"
+            app:chipBackgroundColor="@color/surface_container"
+            app:chipStrokeColor="@color/outline"
+            app:chipStrokeWidth="1dp"
+            style="@style/Widget.Material3.Chip.Filter" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chipAlhamdulillah"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Alhamdulillah"
+            android:textColor="@color/on_surface"
+            app:chipBackgroundColor="@color/surface_container"
+            app:chipStrokeColor="@color/outline"
+            app:chipStrokeWidth="1dp"
+            style="@style/Widget.Material3.Chip.Filter" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chipAllahuAkbar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Allahu Akbar"
+            android:textColor="@color/on_surface"
+            app:chipBackgroundColor="@color/surface_container"
+            app:chipStrokeColor="@color/outline"
+            app:chipStrokeWidth="1dp"
+            style="@style/Widget.Material3.Chip.Filter" />
+
+    </com.google.android.material.chip.ChipGroup>
+
+    <!-- Big counter display -->
+    <TextView
+        android:id="@+id/tvDhikrCount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="0"
+        android:textColor="@color/primary"
+        android:textSize="96sp"
+        android:fontFamily="serif"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Target label -->
+    <TextView
+        android:id="@+id/tvDhikrTarget"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="/ 33"
+        android:textColor="@color/on_surface_variant"
+        android:textSize="14sp"
+        app:layout_constraintTop_toBottomOf="@id/tvDhikrCount"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Tap button -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnDhikrTap"
+        android:layout_width="180dp"
+        android:layout_height="180dp"
+        android:text="TAP"
+        android:textColor="@color/on_primary"
+        android:textSize="18sp"
+        android:letterSpacing="0.1"
+        app:backgroundTint="@color/primary"
+        app:cornerRadius="90dp"
+        app:layout_constraintBottom_toTopOf="@id/btnResetDhikr"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="24dp" />
+
+    <!-- Reset -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnResetDhikr"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Reset"
+        android:textColor="@color/on_surface_variant"
+        app:strokeColor="@color/outline"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginBottom="24dp" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

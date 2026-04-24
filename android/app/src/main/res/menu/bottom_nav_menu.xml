@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/scheduleFragment"
+        android:icon="@android:drawable/ic_menu_agenda"
+        android:title="@string/nav_schedule" />
+    <item
+        android:id="@+id/quranFragment"
+        android:icon="@android:drawable/ic_menu_myplaces"
+        android:title="@string/nav_quran" />
+    <item
+        android:id="@+id/dhikrFragment"
+        android:icon="@android:drawable/ic_menu_rotate"
+        android:title="@string/nav_dhikr" />
+    <item
+        android:id="@+id/chatFragment"
+        android:icon="@android:drawable/ic_menu_send"
+        android:title="@string/nav_chat" />
+</menu>

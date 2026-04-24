@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, MoreHorizontal, Settings2, CheckCircle2 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { cn } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ai, SYSTEM_INSTRUCTIONS, tools, safetySettings } from '../lib/gemini';

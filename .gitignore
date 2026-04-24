@@ -8,8 +8,9 @@ coverage/
 !.env.example
 
 # Sensitive files
-API_FIREBASE.txt
+# Root-level google-services.json is the wrong location — Android one lives in android/app/
 google-services.json
+API_FIREBASE.txt
 
 # IDE and Tooling
 .vscode/
