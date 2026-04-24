@@ -96,9 +96,15 @@ export default function Chat() {
 
     } catch (error: any) {
       console.error("AI Response failed:", error);
-      const errMsg = error?.message?.includes('API key')
-        ? 'AI is not configured. Please contact the admin.'
-        : `Sorry, I encountered an error: ${error?.message ?? 'Unknown error'}. Please try again.`;
+      const raw = error?.message ?? '';
+      let errMsg = 'Sorry, I encountered an error. Please try again.';
+      if (error?.message?.includes('API key') || raw.includes('API_KEY')) {
+        errMsg = '⚠️ AI is not configured. Please contact the admin.';
+      } else if (raw.includes('429') || raw.includes('RESOURCE_EXHAUSTED') || raw.includes('quota')) {
+        errMsg = '⏳ The AI service is temporarily unavailable due to usage limits. Please try again in a few minutes, or the API quota needs to be upgraded at ai.google.dev.';
+      } else if (raw.includes('404') || raw.includes('NOT_FOUND')) {
+        errMsg = '⚠️ AI model not found. Please contact the admin.';
+      }
       setMessages(prev => [...prev, {
         id: (Date.now() + 2).toString(),
         role: 'assistant',
